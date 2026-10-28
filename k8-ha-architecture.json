@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Kubernetes High Availability Architecture (PDB & TopologySpread)",
+    "output": "k8-ha-architecture.html",
+    "visual_preset": "blueprint",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "admin", "type": "external", "label": "Cluster Operator", "sublabel": "kubectl / CI-CD", "pos": [40, 260], "size": [130, 60] },
+    { "id": "apiserver", "type": "security", "label": "kube-apiserver", "sublabel": "Eviction API :6443", "pos": [230, 260], "size": [140, 60], "tag": "control plane" },
+    { "id": "scheduler", "type": "backend", "label": "kube-scheduler", "sublabel": "TopologySpread", "pos": [230, 110], "size": [140, 60], "tag": "control plane" },
+    { "id": "pdb", "type": "security", "label": "PDB Controller", "sublabel": "minAvailable 40%", "pos": [230, 410], "size": [140, 60], "tag": "policy/v1" },
+    { "id": "node1", "type": "cloud", "label": "Worker Node 1", "sublabel": "ip-10-0-11-173", "pos": [490, 170], "size": [130, 60], "tag": "SPOT c5.large" },
+    { "id": "node2", "type": "cloud", "label": "Worker Node 2", "sublabel": "ip-10-0-12-52", "pos": [490, 360], "size": [130, 60], "tag": "SPOT c5.large" },
+    { "id": "pod1", "type": "backend", "label": "Nginx Pod 1", "sublabel": "Replica 1/4", "pos": [700, 120], "size": [120, 54] },
+    { "id": "pod2", "type": "backend", "label": "Nginx Pod 2", "sublabel": "Replica 2/4", "pos": [700, 200], "size": [120, 54] },
+    { "id": "pod3", "type": "backend", "label": "Nginx Pod 3", "sublabel": "Replica 3/4", "pos": [700, 310], "size": [120, 54] },
+    { "id": "pod4", "type": "backend", "label": "Nginx Pod 4", "sublabel": "Replica 4/4", "pos": [700, 390], "size": [120, 54] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "AWS us-east-1 / EKS Cluster: roboshop-dev", "wraps": ["apiserver", "scheduler", "pdb", "node1", "node2", "pod1", "pod2", "pod3", "pod4"], "pad": 20 },
+    { "kind": "security-group", "label": "AZ: us-east-1a (topology.kubernetes.io/zone)", "wraps": ["node1", "pod1", "pod2"], "pad": 14 },
+    { "kind": "security-group", "label": "AZ: us-east-1b (topology.kubernetes.io/zone)", "wraps": ["node2", "pod3", "pod4"], "pad": 14 }
+  ],
+  "connections": [
+    { "id": "c1", "from": "admin", "to": "apiserver", "label": "kubectl drain", "variant": "emphasis" },
+    { "id": "c2", "from": "apiserver", "to": "pdb", "label": "eval budget", "variant": "security" },
+    { "id": "c3", "from": "pdb", "to": "apiserver", "label": "allowed: 2", "variant": "dashed" },
+    { "id": "c4", "from": "apiserver", "to": "scheduler", "label": "evict pods", "variant": "emphasis" },
+    { "id": "c5", "from": "scheduler", "to": "node2", "label": "maxSkew: 1", "variant": "security" },
+    { "id": "c6", "from": "node1", "to": "pod1" },
+    { "id": "c7", "from": "node1", "to": "pod2" },
+    { "id": "c8", "from": "node2", "to": "pod3" },
+    { "id": "c9", "from": "node2", "to": "pod4" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "PDB Protection", "items": ["minAvailable: 40% requires >= 2 pods running", "Single node drain leaves 2 pods (50% >= 40%) -> Approved", "Simultaneous double drain leaves 0 pods -> Strictly Rejected!"] },
+    { "dot": "emerald", "title": "Topology Spread", "items": ["topology.kubernetes.io/zone splits pods evenly 2 : 2 across AZs", "kubernetes.io/hostname distributes across physical worker EC2s", "whenUnsatisfiable: DoNotSchedule prevents clustering"] },
+    { "dot": "rose", "title": "Zero Downtime Guarantee", "items": ["Eviction API enforces voluntary disruption budget", "Pods gracefully terminate while surviving pods take user traffic", "Uncordon restores node capacity after upgrade"] }
+  ]
+}

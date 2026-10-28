@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "diagram_type": "explainer",
+  "meta": {
+    "title": "Kubernetes High Availability: PDB & TopologySpreadConstraints",
+    "id": "k8-ha-deep-dive",
+    "locale": "en",
+    "style": "clean"
+  },
+  "answer": {
+    "summary": "Kubernetes High Availability combines **TopologySpreadConstraints** (spatial spreading across AZs and Nodes) with **PodDisruptionBudget (PDB)** (temporal protection against node drains and platform upgrades) to guarantee zero downtime.",
+    "reasons": [
+      "TopologySpreadConstraints distributes pods evenly across AWS AZs and Nodes with maxSkew: 1.",
+      "PDB mathematically enforces a minimum percentage of pods (e.g. minAvailable: 40%) during voluntary evictions.",
+      "kubectl drain commands that would breach the minimum available budget are strictly blocked by the API server."
+    ],
+    "scope": "Evaluated on AWS EKS v1.35 with multi-AZ SPOT node groups across us-east-1a and us-east-1b."
+  },
+  "panels": [
+    {
+      "id": "mechanics",
+      "title": "Node Drain & PDB Mathematical Formula",
+      "blocks": [
+        {
+          "type": "comparison",
+          "id": "pdb-scenarios",
+          "columns": [
+            "3 Nodes / 5 Pods (2:2:1)",
+            "2 Nodes / 4 Pods (2:2)",
+            "2 Nodes / 7 Pods (4:3)"
+          ],
+          "rows": [
+            {
+              "label": "Spread Balance",
+              "cells": [
+                { "text": "2 pods on Node-1, 2 on Node-2, 1 on Node-3", "assessment": "good", "verdict": "Balanced" },
+                { "text": "2 pods on Node-1, 2 pods on Node-2", "assessment": "good", "verdict": "Balanced" },
+                { "text": "4 pods on Node-1, 3 pods on Node-2", "assessment": "caution", "verdict": "Imbalanced" }
+              ],
+              "id": "row-spread"
+            },
+            {
+              "label": "Drain Impact",
+              "cells": [
+                { "text": "Draining Node-1 leaves 3 pods (60%)", "assessment": "good", "verdict": "Safe" },
+                { "text": "Draining Node-1 leaves 2 pods (50%)", "assessment": "good", "verdict": "Safe" },
+                { "text": "Draining Node-1 leaves 3 pods (42.8%)", "assessment": "caution", "verdict": "Risky" }
+              ],
+              "id": "row-drain"
+            },
+            {
+              "label": "PDB Enforcement",
+              "cells": [
+                { "text": "minAvailable: 60% allowed", "assessment": "good", "verdict": "Drain Succeeds" },
+                { "text": "minAvailable: 40% allowed", "assessment": "good", "verdict": "Drain Succeeds" },
+                { "text": "minAvailable: 60% rejected", "assessment": "bad", "verdict": "Drain Blocked" }
+              ],
+              "id": "row-status"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lifecycle",
+      "title": "Safe Node Drain & Recovery Workflow",
+      "blocks": [
+        {
+          "type": "steps",
+          "id": "drain-steps",
+          "items": [
+            {
+              "id": "step-1",
+              "text": "Admin Triggers Node Drain",
+              "detail": "Operator or CI/CD runs kubectl drain NODE_NAME --ignore-daemonsets --delete-emptydir-data."
+            },
+            {
+              "id": "step-2",
+              "text": "API Server Evaluates PDB",
+              "detail": "Eviction API validates that remaining running pods satisfy minAvailable threshold."
+            },
+            {
+              "id": "step-3",
+              "text": "Pod Rescheduling",
+              "detail": "Kube-scheduler provisions replacement pods onto remaining healthy nodes per TopologySpreadConstraints."
+            },
+            {
+              "id": "step-4",
+              "text": "Node Maintenance & Uncordon",
+              "detail": "Node upgrades complete and operator runs kubectl uncordon NODE_NAME to restore scheduling."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-takeaways",
+      "title": "High Availability Golden Rules",
+      "blocks": [
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            "Always pair TopologySpreadConstraints (zone and hostname) with PDB to avoid clustering before draining.",
+            "Use DoNotSchedule for strict production multi-AZ separation, or ScheduleAnyway for burst elasticity.",
+            "Formula for minAvailable: (Total Pods - Max Pods on Single Node) / Total Pods.",
+            "PDB guards against voluntary maintenance (cordon/drain/autoscaling), not sudden hardware failure."
+          ],
+          "id": "ha-rules-list"
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "k8s-pdb-docs",
+      "title": "Kubernetes Spec: Specifying a Disruption Budget for your Application",
+      "url": "https://kubernetes.io/docs/tasks/run-application/configure-pdb/"
+    },
+    {
+      "id": "k8s-topology-docs",
+      "title": "Kubernetes Spec: Pod Topology Spread Constraints",
+      "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/"
+    }
+  ]
+}

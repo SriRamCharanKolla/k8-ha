@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kubernetes High Availability & PDB Live Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(18, 24, 38, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #a855f7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: radial-gradient(circle at top right, #1e1b4b 0%, #090d16 60%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--primary);
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 15px;
+      max-width: 650px;
+      margin: 0 auto;
+    }
+
+    /* Controls Panel */
+    .controls {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-bottom: 28px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .control-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    select, input[type="range"] {
+      background: #1e293b;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .btn {
+      padding: 10px 18px;
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: none;
+    }
+
+    .btn-drain {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+    }
+    .btn-drain:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4); }
+
+    .btn-reset {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+    .btn-reset:hover { background: rgba(255, 255, 255, 0.15); }
+
+    /* Architecture Grid */
+    .cluster-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .az-box {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      border-radius: 16px;
+      padding: 20px;
+      position: relative;
+    }
+
+    .az-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .az-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .node-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .node-card.cordoned {
+      border-color: var(--warning);
+      background: rgba(245, 158, 11, 0.08);
+    }
+
+    .node-card.drained {
+      border-color: var(--danger);
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    .node-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .node-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .node-status {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .status-ready { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .status-cordon { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .status-drain { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+    .pods-area {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      min-height: 80px;
+      align-items: center;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 8px;
+      border: 1px dashed rgba(255, 255, 255, 0.1);
+    }
+
+    .pod {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #6ee7b7;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 600;
+      animation: pulseIn 0.3s ease;
+      transition: all 0.3s ease;
+    }
+
+    .pod.evicting {
+      animation: evictOut 0.5s forwards;
+    }
+
+    @keyframes pulseIn {
+      from { opacity: 0; transform: scale(0.85); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes evictOut {
+      to { opacity: 0; transform: translateY(-20px) scale(0.8); }
+    }
+
+    /* PDB Evaluation Banner */
+    .pdb-monitor {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 28px;
+    }
+
+    .monitor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .monitor-title {
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .calc-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .calc-card {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .calc-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .calc-val {
+      font-size: 22px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      color: #ffffff;
+    }
+
+    .status-alert {
+      padding: 14px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .alert-success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+    .alert-error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; }
+    .alert-warning { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; }
+
+    /* Terminal Console */
+    .terminal-box {
+      background: #0b0f19;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #a5b4fc;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .terminal-header {
+      color: #64748b;
+      font-size: 11px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .log-entry { margin-bottom: 4px; }
+    .log-success { color: var(--success); }
+    .log-warn { color: var(--warning); }
+    .log-err { color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="badge">EKS Production Governance</div>
+    <h1>Kubernetes High Availability & PDB Simulator</h1>
+    <p class="subtitle">Interactive simulation of PodDisruptionBudget (PDB) and TopologySpreadConstraints during node drains, maintenance, and platform upgrades.</p>
+  </header>
+
+  <!-- Control Bar -->
+  <div class="controls">
+    <div class="control-group">
+      <label>Replicas:</label>
+      <select id="replicaSelect" onchange="resetCluster()">
+        <option value="4" selected>4 Pods (Balanced 2 : 2)</option>
+        <option value="5">5 Pods (Imbalanced 3 : 2)</option>
+        <option value="7">7 Pods (Imbalanced 4 : 3)</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label>PDB minAvailable:</label>
+      <select id="pdbSelect" onchange="updatePDB()">
+        <option value="40" selected>40% (Permits 1 Node Drain)</option>
+        <option value="50">50% (Strict 50%)</option>
+        <option value="60">60% (High Resilience)</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <button class="btn btn-drain" onclick="drainNode('node1')">⚠️ Drain Node 1</button>
+      <button class="btn btn-drain" onclick="drainNode('node2')">⚠️ Drain Node 2</button>
+      <button class="btn btn-reset" onclick="resetCluster()">🔄 Reset Cluster</button>
+    </div>
+  </div>
+
+  <!-- PDB Realtime Calculation Engine -->
+  <div class="pdb-monitor">
+    <div class="monitor-header">
+      <div class="monitor-title">⚡ Pod Disruption Budget Live Calculation</div>
+      <div id="pdbBadge" class="status-alert alert-success" style="padding: 4px 12px; font-size: 12px;">PDB Compliant</div>
+    </div>
+    <div class="calc-row">
+      <div class="calc-card">
+        <div class="calc-label">Total Running Pods</div>
+        <div class="calc-val" id="totalPodsVal">4</div>
+      </div>
+      <div class="calc-card">
+        <div class="calc-label">Target minAvailable</div>
+        <div class="calc-val" id="targetMinVal">40% (2 pods)</div>
+      </div>
+      <div class="calc-card">
+        <div class="calc-label">Available After Drain</div>
+        <div class="calc-val" id="survivingPodsVal">4 (100%)</div>
+      </div>
+      <div class="calc-card">
+        <div class="calc-label">Disruption Allowed?</div>
+        <div class="calc-val" id="allowedDisruptionsVal" style="color: var(--success);">YES (2 allowed)</div>
+      </div>
+    </div>
+    <div id="statusAlert" class="status-alert alert-success">
+      ✅ Cluster is healthy. All pods evenly spread across Availability Zones via <code>topology.kubernetes.io/zone</code>.
+    </div>
+  </div>
+
+  <!-- 2-Tier Topology Cluster Visualization -->
+  <div class="cluster-grid">
+    <!-- AZ 1 -->
+    <div class="az-box">
+      <div class="az-header">
+        <div class="az-title">
+          <span>🌐 AZ: us-east-1a</span>
+        </div>
+        <span style="font-size: 11px; color: var(--text-muted);">topologyKey: zone</span>
+      </div>
+      <div class="node-card" id="card-node1">
+        <div class="node-meta">
+          <div>
+            <div class="node-name">ip-10-0-11-173</div>
+            <div style="font-size: 11px; color: var(--text-muted);">EC2 SPOT c5.large</div>
+          </div>
+          <span class="node-status status-ready" id="status-node1">Ready</span>
+        </div>
+        <div class="pods-area" id="pods-node1"></div>
+      </div>
+    </div>
+
+    <!-- AZ 2 -->
+    <div class="az-box">
+      <div class="az-header">
+        <div class="az-title">
+          <span>🌐 AZ: us-east-1b</span>
+        </div>
+        <span style="font-size: 11px; color: var(--text-muted);">topologyKey: zone</span>
+      </div>
+      <div class="node-card" id="card-node2">
+        <div class="node-meta">
+          <div>
+            <div class="node-name">ip-10-0-12-52</div>
+            <div style="font-size: 11px; color: var(--text-muted);">EC2 SPOT c5.large</div>
+          </div>
+          <span class="node-status status-ready" id="status-node2">Ready</span>
+        </div>
+        <div class="pods-area" id="pods-node2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Realtime Terminal Console -->
+  <div class="terminal-box">
+    <div class="terminal-header">
+      <span>KUBERNETES EVICTION API AUDIT LOG</span>
+      <span>bash</span>
+    </div>
+    <div id="terminalLogs">
+      <div class="log-entry">[System] Cluster initialized: 2 worker nodes active in us-east-1a / us-east-1b.</div>
+      <div class="log-entry">[Scheduler] Applied TopologySpreadConstraints: maxSkew=1, whenUnsatisfiable=DoNotSchedule.</div>
+      <div class="log-entry">[PDB] Policy /apis/policy/v1/namespaces/roboshop/poddisruptionbudgets/nginx active.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let state = {
+    totalReplicas: 4,
+    minAvailablePct: 40,
+    node1: { cordoned: false, pods: 2 },
+    node2: { cordoned: false, pods: 2 }
+  };
+
+  function log(msg, type = '') {
+    const term = document.getElementById('terminalLogs');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + (type ? 'log-' + type : '');
+    const ts = new Date().toLocaleTimeString();
+    entry.innerText = `[${ts}] ${msg}`;
+    term.appendChild(entry);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function renderPods() {
+    const area1 = document.getElementById('pods-node1');
+    const area2 = document.getElementById('pods-node2');
+    area1.innerHTML = '';
+    area2.innerHTML = '';
+
+    for (let i = 1; i <= state.node1.pods; i++) {
+      const p = document.createElement('div');
+      p.className = 'pod';
+      p.innerHTML = `<span>📦</span> nginx-${i}`;
+      area1.appendChild(p);
+    }
+
+    for (let i = 1; i <= state.node2.pods; i++) {
+      const p = document.createElement('div');
+      p.className = 'pod';
+      p.innerHTML = `<span>📦</span> nginx-${state.node1.pods + i}`;
+      area2.appendChild(p);
+    }
+
+    updateStats();
+  }
+
+  function updateStats() {
+    const currentRunning = (state.node1.cordoned ? 0 : state.node1.pods) + (state.node2.cordoned ? 0 : state.node2.pods);
+    const requiredMin = Math.ceil((state.minAvailablePct / 100) * state.totalReplicas);
+
+    document.getElementById('totalPodsVal').innerText = state.totalReplicas;
+    document.getElementById('targetMinVal').innerText = `${state.minAvailablePct}% (${requiredMin} pods)`;
+    document.getElementById('survivingPodsVal').innerText = `${currentRunning} (${Math.round((currentRunning / state.totalReplicas) * 100)}%)`;
+
+    const alertBox = document.getElementById('statusAlert');
+    const pdbBadge = document.getElementById('pdbBadge');
+    const allowedVal = document.getElementById('allowedDisruptionsVal');
+
+    if (currentRunning >= requiredMin) {
+      const disruptions = currentRunning - requiredMin;
+      allowedVal.innerText = `YES (${disruptions} allowed)`;
+      allowedVal.style.color = 'var(--success)';
+      pdbBadge.className = 'status-alert alert-success';
+      pdbBadge.innerText = 'PDB Compliant';
+      alertBox.className = 'status-alert alert-success';
+      alertBox.innerHTML = `✅ Healthy: Running pods (${currentRunning}) meet or exceed PDB requirement (${requiredMin}). Zero-downtime preserved.`;
+    } else {
+      allowedVal.innerText = `BLOCKED (0 allowed)`;
+      allowedVal.style.color = 'var(--danger)';
+      pdbBadge.className = 'status-alert alert-error';
+      pdbBadge.innerText = 'PDB Violated!';
+      alertBox.className = 'status-alert alert-error';
+      alertBox.innerHTML = `🚨 VIOLATION: Available pods (${currentRunning}) fell below minimum required (${requiredMin})! Live customer traffic at risk!`;
+    }
+  }
+
+  function drainNode(nodeKey) {
+    const otherKey = nodeKey === 'node1' ? 'node2' : 'node1';
+    const nodeName = nodeKey === 'node1' ? 'ip-10-0-11-173' : 'ip-10-0-12-52';
+    
+    if (state[nodeKey].cordoned) {
+      log(`Node ${nodeName} is already cordoned!`, 'warn');
+      return;
+    }
+
+    log(`CMD: kubectl drain ${nodeName} --ignore-daemonsets --delete-emptydir-data`, 'warn');
+
+    // Check PDB
+    const podsAfterDrain = state.totalReplicas - state[nodeKey].pods;
+    const requiredMin = Math.ceil((state.minAvailablePct / 100) * state.totalReplicas);
+
+    if (podsAfterDrain < requiredMin) {
+      log(`[Eviction API] 403 Forbidden: Cannot evict pods on ${nodeName}! Remaining pods (${podsAfterDrain}) < minAvailable (${requiredMin})!`, 'err');
+      const alertBox = document.getElementById('statusAlert');
+      alertBox.className = 'status-alert alert-error';
+      alertBox.innerHTML = `⛔ DRAIN BLOCKED BY PDB! Evicting ${nodeName} would leave only ${podsAfterDrain} pods, violating minAvailable (${state.minAvailablePct}% = ${requiredMin} pods). Application downtime prevented!`;
+      return;
+    }
+
+    // Success Drain
+    state[nodeKey].cordoned = true;
+    document.getElementById(`card-${nodeKey}`).className = 'node-card cordoned';
+    document.getElementById(`status-${nodeKey}`).className = 'node-status status-cordon';
+    document.getElementById(`status-${nodeKey}`).innerText = 'SchedulingDisabled';
+
+    log(`[PDB] Drain approved! Evicting ${state[nodeKey].pods} pods from ${nodeName}...`, 'success');
+    
+    // Animate pod eviction
+    const podEls = document.getElementById(`pods-${nodeKey}`).children;
+    for (let p of podEls) p.classList.add('evicting');
+
+    setTimeout(() => {
+      // Reschedule onto other node
+      state[otherKey].pods += state[nodeKey].pods;
+      state[nodeKey].pods = 0;
+      renderPods();
+      log(`[Scheduler] ${nodeName} drained. All workloads rescheduled onto ${otherKey === 'node1' ? 'ip-10-0-11-173' : 'ip-10-0-12-52'} per TopologySpread.`, 'success');
+    }, 600);
+  }
+
+  function resetCluster() {
+    state.totalReplicas = parseInt(document.getElementById('replicaSelect').value);
+    state.minAvailablePct = parseInt(document.getElementById('pdbSelect').value);
+    
+    // Distribute according to TopologySpread (maxSkew 1)
+    state.node1 = { cordoned: false, pods: Math.ceil(state.totalReplicas / 2) };
+    state.node2 = { cordoned: false, pods: Math.floor(state.totalReplicas / 2) };
+
+    document.getElementById('card-node1').className = 'node-card';
+    document.getElementById('card-node2').className = 'node-card';
+    document.getElementById('status-node1').className = 'node-status status-ready';
+    document.getElementById('status-node2').className = 'node-status status-ready';
+    document.getElementById('status-node1').innerText = 'Ready';
+    document.getElementById('status-node2').innerText = 'Ready';
+
+    renderPods();
+    log(`Cluster reset: ${state.totalReplicas} replicas deployed across 2 nodes. PDB set to ${state.minAvailablePct}%.`, 'success');
+  }
+
+  function updatePDB() {
+    state.minAvailablePct = parseInt(document.getElementById('pdbSelect').value);
+    log(`PDB updated to minAvailable: ${state.minAvailablePct}%.`, 'warn');
+    updateStats();
+  }
+
+  // Initial render
+  resetCluster();
+</script>
+
+</body>
+</html>
