@@ -276,51 +276,6 @@ graph LR
 * **`kube-proxy`**: Manages networking and packet forwarding via `iptables` or `IPVS`, routing traffic sent to Service ClusterIPs directly to the appropriate pod endpoints.
 * **Container Runtime (`containerd`)**: Executes and manages the container lifecycle according to the Container Runtime Interface (CRI).
 
----
-
-## 🐙 Enterprise Git Collaboration & Release Workflow
-
-Session 71 introduced enterprise Git practices to prevent accidental production branch overwrites through **GitHub Rulesets** and structured PR workflows.
-
-### 1. Branching Strategy & GitHub Rulesets
-
-To enforce code quality and protect the `main` branch:
-1. Navigate to GitHub Repository $\rightarrow$ **Settings** $\rightarrow$ **Rules** $\rightarrow$ **Rulesets** $\rightarrow$ **New ruleset**.
-2. Target: `Include default branch (main)`.
-3. Enforcement:
-   * **Restrict deletions**: Prevents deleting the `main` branch.
-   * **Block force pushes (`git push --force`)**: Prevents rewriting upstream shared history.
-   * **Require a pull request before merging**: Developers cannot push directly to `main`.
-   * **Require approvals**: At least `1` code review approval before merging is unblocked.
-
-### 2. Merge Commit vs. Rebase: The "Dosa-Shop" Case Study
-
-```mermaid
-gitGraph
-   commit id: "Initial Commit"
-   branch plain-dosa
-   checkout plain-dosa
-   commit id: "dosa batter added"
-   commit id: "light oil added"
-   checkout main
-   merge plain-dosa id: "Merge Commit (2 Parents)"
-   branch karam-dosa
-   checkout karam-dosa
-   commit id: "oil"
-   commit id: "karam"
-   commit id: "erra karam"
-   checkout main
-   commit id: "Linear Rebased Commit"
-```
-
-#### Comparison:
-
-| Feature | Merge Commit (`git merge`) | Rebase (`git rebase`) |
-| :--- | :--- | :--- |
-| **History Structure** | Non-linear with branching bubbles and explicit merge commits. | Linear, flat single-line history. |
-| **Commit Integrity** | **Preserves exact history**: Keeps the original commit timestamps and IDs untouched. | **Rewrites commits**: Creates brand new commit hashes on top of the base branch. |
-| **Parent Count** | Special merge commit has **2 parents**. | Regular commit with **1 parent**. |
-| **When to Use** | Standard feature releases where keeping the complete team PR context is desired. | Cleaning up local commits before PR review or maintaining a pristine linear history. |
 
 ---
 
@@ -330,4 +285,4 @@ gitGraph
 | :--- | :--- | :--- |
 | `0/2 nodes are available: 2 node(s) didn't match pod topology spread constraints` | Deprecated key `failure-domain.beta.kubernetes.io/zone` was used in `manifest.yaml`. | Update key to GA label: `topology.kubernetes.io/zone` and re-apply. |
 | `Cannot evict pod as it would violate the pod's disruption budget` | `kubectl drain` attempted while remaining pods would drop below `minAvailable` percentage. | Wait for rescheduled pods to report `Ready` on target nodes, or adjust PDB percentage to allow maintenance. |
-| `Push rejected: Protected branch hook declined` | Direct push attempted against GitHub `main` branch with active Ruleset. | Create a feature branch (`git checkout -b <branch>`), push to origin, and open a Pull Request. |
+
