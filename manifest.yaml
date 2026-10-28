@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  # these labels are replicaset labels
+  labels:
+    project: roboshop
+    purpose: rs-demo
+    tier: frontend
+    component: frontend
+  annotations:
+    kubernetes.io/change-cause: "moving to 1.29.7"
+spec:
+  replicas: 7
+  selector:
+    # using these labels replica set selects the pod
+    matchLabels:
+      project: roboshop
+      purpose: rs-demo
+      tier: frontend
+      component: frontend
+  # This is pod definition, pod is subset of replicaset
+  template:
+    metadata:
+      labels:
+        project: roboshop
+        purpose: rs-demo
+        tier: frontend
+        component: frontend
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule # ScheduleAnyway is soft rule
+        labelSelector: 
+          matchLabels:
+            project: roboshop
+            purpose: rs-demo
+            tier: frontend
+            component: frontend
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            project: roboshop
+            purpose: rs-demo
+            tier: frontend
+            component: frontend
+      containers:
+      - name: nginx
+        image: nginx:1.29.7
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nginx
+spec:
+  minAvailable: "40%"
+  selector:
+    matchLabels:
+      project: roboshop
+      purpose: rs-demo
+      tier: frontend
+      component: frontend
